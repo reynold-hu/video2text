@@ -1,6 +1,24 @@
-you-get==0.4.1650
-moviepy==1.0.3
-librosa==0.10.1
-soundfile==0.12.1
-torch==2.1.0
-openai-whisper==20231117 
+# --- 核心：下载 + 网页服务 ---
+yt-dlp>=2026.8.19
+requests>=2.32
+fastapi>=0.115
+uvicorn[standard]>=0.32
+
+# 繁转简。Whisper 对中文默认输出繁体，转写完用它统一成简体。
+opencc-python-reimplemented>=0.1.7
+
+# --- 本地语音转写引擎（两个都装，页面上可切换）---
+# mlx-whisper：Apple Silicon 专用，M 系列上最快
+mlx-whisper>=0.4.3
+
+# FunASR Paraformer：中文错字率约为 Whisper 的一半，但只能跑 CPU
+funasr>=1.2
+modelscope>=1.20
+# FunASR 提取音频特征需要一个 fbank 后端。官方给的选择是 torchaudio 或这个，
+# 这个包只有几百 KB，torchaudio 又是一个大 wheel，所以选它。
+kaldi-native-fbank>=1.20
+# funasr 的元数据里 transformers 没有锁版本，uv 会自作主张挑 2021 年的 4.12.2，
+# 而它依赖的 tokenizers 0.10.3 没有 arm64/Py3.12 预编译包，会去编译 Rust 然后失败。
+# 显式钉住下限绕开这个坑。上限卡在 5 以下是因为 transformers 5.x 是破坏性大版本，
+# funasr 是按 4.x 的 API 写的。
+transformers>=4.40,<5

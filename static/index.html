@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视频转文字</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --fg: #18181b;
+    --muted: #71717a;
+    --line: #e4e4e7;
+    --accent: #2563eb;
+    --accent-fg: #ffffff;
+    --ok-bg: #ecfdf5; --ok-fg: #047857; --ok-line: #a7f3d0;
+    --ai-bg: #eff6ff; --ai-fg: #1d4ed8; --ai-line: #bfdbfe;
+    --warn-bg: #fffbeb; --warn-fg: #92400e; --warn-line: #fde68a;
+    --err-bg: #fef2f2; --err-fg: #b91c1c; --err-line: #fecaca;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0d; --card: #151518; --fg: #fafafa; --muted: #a1a1aa;
+      --line: #27272a; --accent: #3b82f6;
+      --ok-bg: #052e1f; --ok-fg: #6ee7b7; --ok-line: #065f46;
+      --ai-bg: #0c1e3d; --ai-fg: #93c5fd; --ai-line: #1e40af;
+      --warn-bg: #2b1f05; --warn-fg: #fcd34d; --warn-line: #78350f;
+      --err-bg: #2b0d0d; --err-fg: #fca5a5; --err-line: #7f1d1d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px;
+  }
+  .banner {
+    display: none; padding: 12px 14px; border-radius: 10px; font-size: 14px;
+    margin-bottom: 16px; line-height: 1.55;
+  }
+  .banner.show { display: block; }
+  .banner.warn { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-line); }
+  .banner.err  { background: var(--err-bg);  color: var(--err-fg);  border: 1px solid var(--err-line); }
+  .banner code {
+    background: rgba(128,128,128,.18); padding: 1px 5px; border-radius: 4px;
+    font-size: 13px;
+  }
+  textarea {
+    width: 100%; min-height: 88px; resize: vertical; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+    color: var(--fg); font: inherit; font-size: 14px; outline: none;
+    transition: border-color .15s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .grow { flex: 1; }
+  label.field { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  select {
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
+    outline: none; cursor: pointer;
+  }
+  button {
+    padding: 9px 18px; border: none; border-radius: 9px; background: var(--accent);
+    color: var(--accent-fg); font: inherit; font-weight: 500; cursor: pointer;
+    transition: opacity .15s;
+  }
+  button:hover:not(:disabled) { opacity: .88; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost {
+    background: transparent; color: var(--fg); border: 1px solid var(--line);
+    font-weight: 400; font-size: 13px; padding: 8px 14px;
+  }
+  button.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+  #progress { display: none; margin-top: 20px; }
+  #progress.show { display: block; }
+  .stage { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .spin {
+    width: 15px; height: 15px; border: 2px solid var(--line);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .logs {
+    margin-top: 10px; font-size: 12.5px; color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-height: 130px; overflow-y: auto; padding-left: 25px;
+  }
+  .logs div { padding: 1px 0; }
+
+  #result { display: none; margin-top: 20px; }
+  #result.show { display: block; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+  .title { font-weight: 600; font-size: 15px; }
+  .badge {
+    font-size: 12px; padding: 2px 9px; border-radius: 99px;
+    border: 1px solid; font-weight: 500; white-space: nowrap;
+  }
+  .badge.subtitle { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--ok-line); }
+  .badge.asr      { background: var(--ai-bg); color: var(--ai-fg); border-color: var(--ai-line); }
+  .badge.plain    { background: transparent; color: var(--muted); border-color: var(--line); }
+  .byline { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  pre.text {
+    margin: 0; padding: 14px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; max-height: 380px; overflow-y: auto;
+    font: inherit; font-size: 14px; white-space: pre-wrap; word-break: break-word;
+  }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+  .downloads .label { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  .notes {
+    margin-top: 14px; padding: 12px 14px; background: var(--bg); border-radius: 10px;
+    border: 1px solid var(--line); font-size: 13.5px; white-space: pre-wrap;
+    max-height: 150px; overflow-y: auto;
+  }
+  .notes .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>视频转文字</h1>
+  <div class="sub">粘贴链接，提取文字，下载 txt · 支持 B站 / 小红书 / YouTube</div>
+
+  <div id="banner" class="banner"></div>
+
+  <div class="card">
+    <textarea id="url" placeholder="粘贴视频链接…&#10;&#10;小红书可以直接粘 App 的整段分享文案，链接会自动识别"></textarea>
+    <div class="row">
+      <label class="field">
+        <span>语言</span>
+        <select id="language">
+          <option value="zh" selected>中文</option>
+          <option value="en">English</option>
+          <option value="">自动检测</option>
+        </select>
+      </label>
+      <label class="field grow">
+        <span>转写引擎</span>
+        <select id="engine"></select>
+      </label>
+      <button id="go">提取文字</button>
+    </div>
+    <div class="hint" id="hint">
+      B站和 YouTube 有字幕轨的视频会直接抓取，秒出；其余走本地语音转写。
+    </div>
+  </div>
+
+  <div id="progress">
+    <div class="stage"><div class="spin"></div><span id="stage">准备中…</span></div>
+    <div class="logs" id="logs"></div>
+  </div>
+
+  <div id="result" class="card">
+    <div class="meta">
+      <span class="title" id="r-title"></span>
+      <span class="badge" id="r-source"></span>
+      <span class="badge plain" id="r-platform"></span>
+    </div>
+    <div class="byline" id="r-byline"></div>
+    <pre class="text" id="r-text"></pre>
+    <div class="notes" id="r-notes" style="display:none">
+      <div class="label">笔记正文</div><div id="r-notes-body"></div>
+    </div>
+    <div class="downloads" id="r-downloads"><span class="label">下载：</span></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let engineReady = false;
+
+function showBanner(kind, html) {
+  const b = $('banner');
+  b.className = 'banner show ' + kind;
+  b.innerHTML = html;
+}
+
+async function init() {
+  // 引擎列表
+  try {
+    const r = await fetch('/api/engines').then(r => r.json());
+    const sel = $('engine');
+    sel.innerHTML = '';
+    for (const e of r.engines) {
+      const o = document.createElement('option');
+      o.value = e.name;
+      o.textContent = e.ready ? e.display : e.display + '（未安装）';
+      o.disabled = !e.ready;
+      sel.appendChild(o);
+    }
+    const firstReady = r.engines.find(e => e.ready);
+    if (firstReady) { sel.value = firstReady.name; engineReady = true; }
+  } catch (e) { /* 引擎列表拿不到不影响抓字幕 */ }
+
+  // 登录态
+  try {
+    const c = await fetch('/api/cookies').then(r => r.json());
+    const bili = c.sites.bilibili || {};
+    if (!bili.logged_in) {
+      showBanner('warn',
+        '<b>还没检测到 B站 登录态。</b>B站的 AI 字幕必须登录才会返回，' +
+        '所以现在 B站 视频大多会走本地转写（慢一些，但结果一样能用）。<br>' +
+        '想要秒出：在 Chrome 里登录一次 bilibili.com，然后刷新本页。');
+    }
+  } catch (e) { /* 探测失败就静默 */ }
+}
+
+function fmtDuration(sec) {
+  sec = Math.round(sec || 0);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+               : `${m}:${String(s).padStart(2,'0')}`;
+}
+
+async function start() {
+  const text = $('url').value.trim();
+  if (!text) { $('url').focus(); return; }
+
+  $('go').disabled = true;
+  $('result').classList.remove('show');
+  $('banner').classList.remove('show');
+  $('progress').classList.add('show');
+  $('logs').innerHTML = '';
+  $('stage').textContent = '准备中…';
+
+  let jobId;
+  try {
+    const res = await fetch('/api/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: text,
+        engine: $('engine').value,
+        language: $('language').value
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || '请求失败');
+    }
+    jobId = (await res.json()).job_id;
+  } catch (e) {
+    fail(e.message);
+    return;
+  }
+
+  poll(jobId);
+}
+
+function poll(jobId) {
+  const timer = setInterval(async () => {
+    let job;
+    try {
+      const res = await fetch('/api/job/' + jobId);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '任务丢失');
+      job = await res.json();
+    } catch (e) {
+      clearInterval(timer); fail(e.message); return;
+    }
+
+    $('stage').textContent = job.stage || '处理中…';
+    $('logs').innerHTML = '';
+    for (const line of job.logs || []) {
+      const d = document.createElement('div');
+      d.textContent = line;
+      $('logs').appendChild(d);
+    }
+    $('logs').scrollTop = $('logs').scrollHeight;
+
+    if (job.status === 'done') { clearInterval(timer); render(job); }
+    else if (job.status === 'error') { clearInterval(timer); fail(job.error); }
+  }, 500);
+}
+
+function fail(message) {
+  $('progress').classList.remove('show');
+  $('go').disabled = false;
+  showBanner('err', String(message).replace(/\n/g, '<br>'));
+}
+
+function render(job) {
+  const r = job.result;
+  $('progress').classList.remove('show');
+  $('go').disabled = false;
+
+  $('r-title').textContent = r.title || '(无标题)';
+
+  const isSub = r.source === 'subtitle';
+  const badge = $('r-source');
+  badge.className = 'badge ' + (isSub ? 'subtitle' : 'asr');
+  badge.textContent = isSub ? '来自字幕' : '本地转写';
+
+  $('r-platform').textContent = r.platform_name;
+
+  const bits = [];
+  if (r.author) bits.push(r.author);
+  if (r.created) bits.push(r.created);
+  if (r.duration) bits.push('时长 ' + fmtDuration(r.duration));
+  bits.push(r.count + ' 句');
+  $('r-byline').textContent = bits.join(' · ');
+
+  $('r-text').textContent = r.text;
+
+  if (r.extra) {
+    $('r-notes').style.display = '';
+    $('r-notes-body').textContent = r.extra;
+  } else {
+    $('r-notes').style.display = 'none';
+  }
+
+  const box = $('r-downloads');
+  box.innerHTML = '<span class="label">下载：</span>';
+  for (const f of r.formats) {
+    const b = document.createElement('button');
+    b.className = 'ghost';
+    b.textContent = f.label + ' .' + f.suffix;
+    b.onclick = () => {
+      // 走 <a download> 而不是 fetch，让浏览器直接用服务端给的文件名
+      const a = document.createElement('a');
+      a.href = `/api/download/${job.id}/${f.key}`;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+    box.appendChild(b);
+  }
+
+  $('result').classList.add('show');
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('go').onclick = start;
+// Cmd/Ctrl + Enter 直接提交
+$('url').addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') start();
+});
+init();
+</script>
+</body>
+</html>

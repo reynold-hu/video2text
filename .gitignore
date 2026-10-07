@@ -177,6 +177,9 @@ cython_debug/
 outputs/
 temp_videos/
 
+# 运行时临时目录（下载的音频、转写的中间文件）
+.work/
+
 # IDE相关
 .idea/
 .vscode/

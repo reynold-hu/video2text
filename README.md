@@ -1,129 +1,163 @@
-# Video to Text Converter
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
+  <img alt="OpenVideo2Text" src="docs/logo.png" width="460">
+</picture>
 
-## 项目简介
-这个项目用于将视频中的音频转换为文本。它支持从Bilibili下载视频，提取音频，使用Whisper模型将音频转换为文本，并使用讯飞星火大模型优化文本内容。
+粘贴链接 → 提取文字 → 下载 txt。支持 **B站 / 小红书 / YouTube**，全程本地运行，不需要任何付费 API，也不上传你的数据。
 
-## 功能
-- 从Bilibili下载视频
-- 提取视频中的音频
-- 使用Whisper模型将音频转换为文本
-- 使用讯飞星火大模型优化和总结文本内容
-- 智能音频分段处理
-- GPU加速支持
+---
 
-## 使用方法
-1. 安装依赖：
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 快速开始
 
-2. 配置环境：
-   - 创建 `.env` 文件并添加讯飞星火API配置：
-     ```
-     SPARK_APPID=你的APPID
-     SPARK_API_KEY=你的API Key
-     SPARK_API_SECRET=你的API Secret
-     ```
+```bash
+brew install uv ffmpeg    # 只需要装这两个
+```
 
-3. 运行程序：
-   ```bash
-   python main.py
-   ```
+然后**双击 `run.command`**。浏览器会自动打开 `http://127.0.0.1:8756`。
 
-## 性能优化
-- GPU加速：
-  - 自动检测并使用GPU（如NVIDIA显卡）
-  - 支持CUDA加速，显著提升处理速度
-  - 实时显示GPU显存使用情况
+首次运行会自动建虚拟环境并安装依赖（要几分钟，见下面的「首次安装慢」）。
 
-- 音频处理优化：
-  - 智能音频分段，避免过多小片段
-  - 自动合并短片段（<30秒）
-  - 自动分割长片段（>300秒）
-  - 优化静音检测参数
+## 它怎么工作
 
-- 文本处理优化：
-  - 使用讯飞星火大模型优化文本内容
-  - 支持网页搜索增强
-  - 智能调整温度参数
-  - 保持专业术语完整性
-  - 优化语言表达
-  - 保持段落结构
+核心是一条**先便宜后昂贵**的流水线：
 
-## 系统要求
-- Python 3.8+
-- 足够的磁盘空间
-- 推荐使用GPU（NVIDIA显卡）以获得更好的性能
-- 如果使用GPU，需要安装CUDA和对应版本的PyTorch
-- 讯飞开放平台账号和API授权
+```
+粘贴链接
+  ↓ 识别平台（自动展开 b23.tv / xhslink.com 短链，能从整段分享文案里提出链接）
+  ↓ ① 有现成字幕轨吗？
+        B站 ✅   YouTube ✅   →  直接抓，秒出
+        ↓ 没有
+  ↓ ② yt-dlp 只下音频流（不是整个视频）
+  ↓ ③ ffmpeg 转 16kHz 单声道 wav
+  ↓ ④ 本地语音转写
+  ↓ ⑤ 输出 txt / srt
+```
 
-## 注意事项
-- 首次运行时会下载Whisper模型，可能需要一些时间
-- 使用GPU时，建议使用支持CUDA的PyTorch版本
-- 处理长视频时，建议使用GPU以获得更好的性能
-- 确保有足够的磁盘空间存储临时文件和输出结果
-- 注意讯飞星火API的调用频率限制和token限制
+**「有字幕就不转写」是重点。** B站和 YouTube 上大量视频本来就有字幕轨（含 AI 自动字幕），
+抓下来是秒级的；只有真的没有字幕，才值得花几十秒跑语音识别。
 
-## Project Description
-This project is used to convert audio from videos into text. It supports downloading videos from Bilibili, extracting audio, using the Whisper model to convert audio into text, and optimizing the text content using Xunfei Spark AI.
+结果页会用徽章标出这份文字是哪来的：
 
-## Features
-- Download videos from Bilibili
-- Extract audio from videos
-- Convert audio to text using the Whisper model
-- Optimize and summarize text content using Xunfei Spark AI
-- Intelligent audio segmentation
-- GPU acceleration support
+| 徽章 | 含义 |
+|---|---|
+| 🟢 **来自字幕** | 平台提供的原始字幕，准确度高，秒出 |
+| 🔵 **本地转写** | 语音识别生成，可能有错字，慢一些 |
 
-## Usage
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 转写引擎
 
-2. Configure environment:
-   - Create `.env` file and add your Xunfei Spark API configuration:
-     ```
-     SPARK_APPID=your_appid
-     SPARK_API_KEY=your_api_key
-     SPARK_API_SECRET=your_api_secret
-     ```
+| 引擎 | 速度 | 中文准确率 | 说明 |
+|---|---|---|---|
+| **mlx-whisper** | 快 | 一般 | Apple 芯片专用，跑在 GPU 上，默认选它 |
+| **FunASR Paraformer** | 慢（只能跑 CPU） | 好，错字率约为 Whisper 的一半 | 中文内容值得忍受慢 |
 
-3. Run the program:
-   ```bash
-   python main.py
-   ```
+两个都装了，页面上随时可切。
 
-## Performance Optimizations
-- GPU Acceleration:
-  - Automatic GPU detection and utilization
-  - CUDA support for significant speed improvement
-  - Real-time GPU memory usage monitoring
+模型可以换（默认 `large-v3-turbo`，中文建议就用它）：
 
-- Audio Processing Optimization:
-  - Intelligent audio segmentation
-  - Automatic short segment merging (<30s)
-  - Automatic long segment splitting (>300s)
-  - Optimized silence detection parameters
+```bash
+V2T_MLX_MODEL=mlx-community/whisper-small-mlx python app.py
+```
 
-- Text Processing Optimization:
-  - Xunfei Spark AI-based text optimization
-  - Web search enhancement
-  - Intelligent temperature adjustment
-  - Professional terminology preservation
-  - Language expression improvement
-  - Paragraph structure maintenance
+可选 `tiny`(75MB) / `base`(145MB) / `small`(480MB) / `large-v3-turbo`(1.6GB)。
 
-## System Requirements
-- Python 3.8+
-- Sufficient disk space
-- GPU recommended (NVIDIA graphics card) for better performance
-- CUDA and corresponding PyTorch version if using GPU
-- Xunfei Open Platform account and API authorization
+## 各平台说明
 
-## Notes
-- First run will download the Whisper model, which may take some time
-- When using GPU, it's recommended to use PyTorch with CUDA support
-- For long videos, GPU is recommended for better performance
-- Ensure sufficient disk space for temporary files and output results
-- Be aware of Xunfei Spark API rate limits and token limits 
+### B站
+
+**AI 字幕必须登录才返回**，匿名请求永远拿到空列表。所以：
+
+1. 在 Chrome（或 Safari / Edge）里登录一次 bilibili.com
+2. 刷新本页 —— 顶部黄色提示消失即表示已就绪
+
+没登录也能用，只是会退到本地转写。支持 BV 号、av 号、分P（`?p=2`），番剧页面暂不支持。
+
+### YouTube
+
+开箱即用。人工字幕优先，没有就用自动字幕。年龄限制视频需要浏览器登录态。
+
+### 小红书
+
+小红书**从来没有字幕轨**，所以永远走本地转写。
+
+两个硬约束：
+
+- **必须粘完整分享链接**（形如 `https://www.xiaohongshu.com/explore/xxxx?xsec_token=...`）。
+  `xsec_token` 是笔记一对一的，缺了会解析失败。App 里复制的那一整段分享文案可以整个粘进来，链接会自动识别。
+- **只支持视频笔记**，图文笔记没有音轨。
+
+笔记正文文案会一并抓下来，附在结果末尾。
+
+<details>
+<summary>它是怎么做到的</summary>
+
+小红书网页的 HTML 里内嵌了一坨 `window.__INITIAL_STATE__` JSON，里面有视频的真实地址。
+解析它不需要算签名，也不需要无头浏览器 —— yt-dlp 内置的 extractor 一共 109 行。
+
+那些「小红书视频下载」小程序做的事其实一样，只不过解析跑在它们自己的服务器上。
+
+</details>
+
+## 输出格式
+
+| 格式 | 用途 |
+|---|---|
+| 纯文本 | 每句一行，最干净 |
+| 带时间戳 | 每行前面加 `MM:SS`，方便定位 |
+| 连成一段 | 用逗号连成整段，适合直接丢给大模型 |
+| SRT / WebVTT | 标准字幕文件，可导入播放器 |
+
+## 目录结构
+
+```
+run.command            双击启动
+app.py                 FastAPI 服务：任务管理 + 下载
+static/index.html      前端（单文件，无构建步骤）
+core/
+  router.py            URL 识别、短链展开
+  cookies.py           浏览器登录态探测
+  pipeline.py          流水线编排
+  audio.py             yt-dlp 下载音频 + ffmpeg 转换
+  writer.py            五种输出格式
+  schemas.py           统一数据模型
+  platforms/           三个平台的适配器，各自独立
+  asr/                 两个转写引擎，接口统一
+docs/                  README 用的图
+```
+
+加一个平台只需要在 `core/platforms/` 下加一个文件实现 `fetch()`，
+拿不到字幕就抛 `NoSubtitle` —— 剩下的流水线会自动接管。
+
+## 常见问题
+
+**B站提取出来是空的 / 提示没有字幕轨**
+没登录。去浏览器登录 bilibili.com，刷新页面。
+
+**小红书解析失败**
+检查链接是否完整（要带 `xsec_token`）。短链 `xhslink.com` 会自动展开，
+但如果 App 给的分享链接本身不完整，展开后也拿不到 token。
+
+**转写很慢**
+首次要下载模型（默认那个约 1.6 GB），之后就快了。赶时间可以换 `small` 或 `tiny` 模型。
+
+**首次安装慢**
+正常。两个转写引擎都要 PyTorch，加起来 1 GB 以上。挂了代理会更慢，
+可以加国内源：`uv pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt`
+
+**依赖装到一半失败**
+`funasr` 的依赖声明里 `transformers` 没锁版本，包管理器可能挑到 2021 年的老版本，
+它依赖的 `tokenizers` 又没有 Apple 芯片的预编译包，会去编译 Rust 然后失败。
+`requirements.txt` 里已经钉了 `transformers>=4.40,<5` 绕开 —— 如果还是失败，
+删掉 `.venv` 重新来一遍。
+
+**提示找不到 ffmpeg**
+`brew install ffmpeg`
+
+## 致谢
+
+- 字幕抓取思路和输出格式移植自 [bilibili-subtitle](https://github.com/IndieKKY/bilibili-subtitle)（MIT）
+- 下载能力来自 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（Unlicense）
+- 转写来自 [mlx-whisper](https://github.com/ml-explore/mlx-examples)（MIT）和 [FunASR](https://github.com/modelscope/FunASR)（MIT）
+
+## 说明
+
+本项目仅供个人学习使用。请遵守各平台的服务条款，不要用于批量抓取或商业用途。
