@@ -20,8 +20,10 @@ PUNC_MODEL = "ct-punc"
 
 class FunASREngine(Engine):
     name = "funasr"
-    display = "FunASR（中文准）"
-    note = "中文错字率约为 Whisper 的一半，但只能跑 CPU，慢一些"
+    display = "FunASR（中文）"
+    # 网上流传的"中文错字率只有 Whisper 一半"是它自己跑分集上的数字。
+    # 实测真实视频上两者持平（14.2% vs 14.4%），速度却差约 4 倍，所以默认不选它。
+    note = "只跑 CPU，实测比 mlx 慢约 4 倍；准确率与 mlx 基本持平"
     requires = ("funasr", "modelscope")
 
     def model_cached(self) -> bool | None:
