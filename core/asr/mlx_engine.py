@@ -25,6 +25,31 @@ class MLXWhisperEngine(Engine):
     note = "Apple 芯片专用，速度最快"
     requires = ("mlx_whisper",)
 
+    def model_cached(self) -> bool | None:
+        """权重是否已在本地缓存。只用本地文件判断，不会触发下载。
+
+        注意不能只看 snapshot_download 是否成功 —— 那只看 snapshot 目录在不在，
+        而下载中断时 config.json 这种小文件已经落地了，目录是存在的，权重却还是
+        .incomplete。所以必须确实找到权重文件才算数。
+        """
+        from pathlib import Path
+
+        try:
+            from huggingface_hub import snapshot_download
+
+            path = Path(snapshot_download(MODEL, local_files_only=True))
+        except Exception:
+            return False
+
+        for f in path.rglob("*"):
+            if f.is_file() and f.suffix in (".npz", ".safetensors", ".bin"):
+                try:
+                    if f.stat().st_size > 1_000_000:
+                        return True
+                except OSError:
+                    continue
+        return False
+
     def transcribe(
         self, wav: Path, language: str | None = None, on_progress: ProgressFn = None
     ) -> list[Segment]:

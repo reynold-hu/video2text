@@ -194,11 +194,16 @@ async function init() {
     for (const e of r.engines) {
       const o = document.createElement('option');
       o.value = e.name;
-      o.textContent = e.ready ? e.display : e.display + '（未安装）';
+      let label = e.display;
+      if (!e.ready) label += '（未安装）';
+      else if (e.model_cached === false) label += '（模型待下载）';
+      o.textContent = label;
       o.disabled = !e.ready;
       sel.appendChild(o);
     }
-    const firstReady = r.engines.find(e => e.ready);
+    // 默认选模型已经在本地的那个 —— 否则用户点了才发现要下 1.6 GB
+    const firstReady = r.engines.find(e => e.ready && e.model_cached)
+                    || r.engines.find(e => e.ready);
     if (firstReady) { sel.value = firstReady.name; engineReady = true; }
   } catch (e) { /* 引擎列表拿不到不影响抓字幕 */ }
 

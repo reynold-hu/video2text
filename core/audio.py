@@ -8,9 +8,10 @@
 
 import shutil
 import subprocess
-import tempfile
 import uuid
 from pathlib import Path
+
+import requests
 
 from .ytdlp_util import base_opts
 
@@ -112,6 +113,43 @@ def to_wav(src: Path, on_progress=None) -> Path:
         tail = (proc.stderr or "").strip().splitlines()[-3:]
         raise AudioError("ffmpeg 转换失败：" + " / ".join(tail))
     return dst
+
+
+def download_direct(media_url: str, referer: str | None = None, on_progress=None) -> Path:
+    """直接从媒体地址下载，不经过 yt-dlp。
+
+    浏览器扩展在页面里能拿到真实的 CDN 地址，那是带着签名的直链，直接拉就行 ——
+    既省掉一次页面解析，也绕开了「服务端返回降级页面」这类问题。
+    小红书的链接尤其受益。
+    """
+    log = on_progress or (lambda _: None)
+    workdir = _workdir()
+    job_dir = workdir / uuid.uuid4().hex[:12]
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    log("正在下载音频…")
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        ),
+    }
+    if referer:
+        headers["Referer"] = referer
+
+    try:
+        with requests.get(media_url, headers=headers, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            dest = job_dir / "audio.mp4"
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1 << 16):
+                    f.write(chunk)
+    except requests.RequestException as e:
+        raise AudioError(f"下载媒体文件失败：{str(e)[:150]}") from e
+
+    if not dest.exists() or dest.stat().st_size == 0:
+        raise AudioError("下载到的文件是空的")
+    return dest
 
 
 def prepare(url: str, site: str | None = None, on_progress=None) -> Path:

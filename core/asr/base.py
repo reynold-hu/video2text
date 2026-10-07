@@ -28,6 +28,14 @@ class Engine(ABC):
     # 整个 torch 栈），所以可用性检测得单独查这个。
     requires: tuple[str, ...] = ()
 
+    def model_cached(self) -> bool | None:
+        """模型权重是否已在本地。
+
+        包装上 ≠ 能用：首次使用还要下几百 MB 到 1.6 GB 的权重，网络不好时这一步
+        很可能失败。返回 None 表示无法判断。
+        """
+        return None
+
     @abstractmethod
     def transcribe(
         self, wav: Path, language: str | None = None, on_progress: ProgressFn = None
@@ -104,5 +112,11 @@ def available() -> list[dict]:
         }
         if missing:
             entry["error"] = "缺少依赖：" + "、".join(missing)
+            entry["model_cached"] = None
+        else:
+            try:
+                entry["model_cached"] = cls().model_cached()
+            except Exception:
+                entry["model_cached"] = None
         out.append(entry)
     return out

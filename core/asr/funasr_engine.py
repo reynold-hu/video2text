@@ -24,6 +24,49 @@ class FunASREngine(Engine):
     note = "中文错字率约为 Whisper 的一半，但只能跑 CPU，慢一些"
     requires = ("funasr", "modelscope")
 
+    def model_cached(self) -> bool | None:
+        """三个模型（转写 / 断句 / 标点）都在本地才算就绪。
+
+        ModelScope 的目录名很长且带版本，实际长这样：
+            iic--speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch
+            iic--speech_fsmn_vad_zh-cn-16k-common-pytorch
+            iic--punc_ct-transformer_cn-en-common-vocab471067-large
+        所以按关键词匹配而不是写死名字（注意用的是下划线，不是 fsmn-vad 那种连字符）。
+        """
+        import os
+        import re
+        from pathlib import Path
+
+        cache = Path(
+            os.environ.get("MODELSCOPE_CACHE", Path.home() / ".cache" / "modelscope")
+        )
+        models_dir = cache / "models"
+        if not models_dir.is_dir():
+            return False
+
+        patterns = {
+            "asr": re.compile(r"paraformer", re.I),
+            "vad": re.compile(r"fsmn.*vad|vad.*fsmn", re.I),
+            "punc": re.compile(r"punc", re.I),
+        }
+
+        for pattern in patterns.values():
+            hit = False
+            for d in models_dir.iterdir():
+                if not (d.is_dir() and pattern.search(d.name)):
+                    continue
+                # 光有目录不算，得有实际权重文件（放权重的那层通常几十 MB 起）
+                if any(
+                    f.is_file() and f.stat().st_size > 1_000_000
+                    for f in d.rglob("*")
+                    if f.is_file()
+                ):
+                    hit = True
+                    break
+            if not hit:
+                return False
+        return True
+
     def __init__(self):
         self._model = None
 

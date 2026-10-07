@@ -71,9 +71,80 @@ def run(
         log(f"{e.reason}，改用本地转写")
 
     # ---- 第二步：下载音频 + 本地转写 ----
+    return _transcribe(url, platform, meta, engine, language, log)
+
+
+def run_from_page(
+    payload: dict,
+    engine: str = "mlx",
+    language: str | None = "zh",
+    on_progress: ProgressFn | None = None,
+) -> Transcript:
+    """给浏览器扩展用的入口：页面里已经拿到了需要的一切，不用再解析一遍。
+
+    payload 形如：
+        {"url": 页面地址, "platform": "xiaohongshu",
+         "media_url": 页面里读到的媒体直链（可选）,
+         "title"/"author"/"created"/"extra": 页面里读到的元信息}
+
+    有 media_url 时直接下这个地址 —— 那是带签名的 CDN 直链，既省一次页面解析，
+    也绕开了「服务端返回降级页面」这类问题（小红书的 token 过期就是这个表现）。
+    """
+    log: ProgressFn = on_progress or (lambda _: None)
+
+    url = (payload or {}).get("url") or ""
+    if not url:
+        raise PipelineError("没拿到页面地址")
+
+    try:
+        platform = payload.get("platform") or router.detect(url)
+    except router.UnsupportedURL as e:
+        raise PipelineError(str(e)) from e
+
+    meta = {
+        "title": payload.get("title") or "",
+        "author": payload.get("author") or "",
+        "created": payload.get("created") or "",
+        "extra": payload.get("extra") or "",
+    }
+    media_url = payload.get("media_url") or ""
+
+    # 有直链就走直链；否则退回按页面地址解析（B站/YouTube 本来就靠这个）
+    log(f"识别到{router.PLATFORM_NAMES.get(platform, platform)}链接")
+    if not media_url:
+        adapter = _get_platform(platform)
+        try:
+            transcript = adapter.fetch(url, log)
+            log(f"完成，共 {len(transcript.segments)} 句")
+            return transcript
+        except Unsupported as e:
+            raise PipelineError(str(e)) from e
+        except NoSubtitle as e:
+            meta = {**e.meta, **{k: v for k, v in meta.items() if v}}
+            log(f"{e.reason}，改用本地转写")
+    else:
+        log("页面里拿到了媒体地址，直接使用")
+
+    return _transcribe(url, platform, meta, engine, language, log, media_url=media_url)
+
+
+def _transcribe(
+    url: str,
+    platform: str,
+    meta: dict,
+    engine: str,
+    language: str | None,
+    log: ProgressFn,
+    media_url: str = "",
+) -> Transcript:
+    """下载音频并转写，返回 Transcript。"""
     wav = None
     try:
-        wav = audio.prepare(url, site=platform, on_progress=log)
+        if media_url:
+            raw = audio.download_direct(media_url, referer=url, on_progress=log)
+            wav = audio.to_wav(raw, on_progress=log)
+        else:
+            wav = audio.prepare(url, site=platform, on_progress=log)
 
         asr_engine = asr.get_engine(engine)
         log(f"正在用 {asr_engine.display} 转写…")

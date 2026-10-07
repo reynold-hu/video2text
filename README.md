@@ -60,6 +60,16 @@ V2T_MLX_MODEL=mlx-community/whisper-small-mlx python app.py
 
 可选 `tiny`(75MB) / `base`(145MB) / `small`(480MB) / `large-v3-turbo`(1.6GB)。
 
+## 浏览器扩展（可选）
+
+`extension/` 里带了一个 Chrome 扩展。装不装都能用 —— 网页版是完整的；
+装上之后不用复制粘贴，在视频页面上点一下图标就行。
+
+它更实际的价值在于**小红书**：人在页面上，`xsec_token` 永远是新鲜的，
+媒体地址也能直接从页面里读出来，绕开了「链接十分钟就过期」这个问题。
+
+安装方式见 [extension/README.md](extension/README.md)。
+
 ## 各平台说明
 
 ### B站
@@ -127,6 +137,7 @@ core/
   platforms/           三个平台的适配器，各自独立
   asr/                 两个转写引擎，接口统一
 tests/                 自动化测试
+extension/             可选的 Chrome 扩展（见它的 README）
 docs/                  README 用的图
 ```
 
@@ -135,12 +146,13 @@ docs/                  README 用的图
 用标准库 `unittest`，不需要额外装东西：
 
 ```bash
-.venv/bin/python -m unittest discover -s tests
+.venv/bin/python -m unittest discover -s tests   # 92 个
+node extension/test/extract.test.js               # 14 个，扩展的提取逻辑
 ```
 
 覆盖了输出格式、URL 路由、三个平台的解析逻辑，以及**流水线的降级决策**
 （有字幕时绝不下载音频、无字幕时元信息要接住、图文笔记不该浪费时间走 ASR）。
-全程不联网。
+Python 那套全程不联网。
 
 加一个平台只需要在 `core/platforms/` 下加一个文件实现 `fetch()`，
 拿不到字幕就抛 `NoSubtitle` —— 剩下的流水线会自动接管。
@@ -156,6 +168,14 @@ docs/                  README 用的图
 
 **转写很慢**
 首次要下载模型（默认那个约 1.6 GB），之后就快了。赶时间可以换 `small` 或 `tiny` 模型。
+
+**mlx-whisper 一直说「模型待下载」，或者下载总是失败**
+默认模型 1.6 GB，网络不稳时很难拉下来。两个办法：
+
+- 换国内镜像重试：`HF_ENDPOINT=https://hf-mirror.com python app.py`
+- **直接用 FunASR 引擎** —— 它的模型通常更小、更易下载，而且中文准确率更好
+
+页面上会标出每个引擎的模型是否已经在本机（「模型待下载」= 点下去要先联网拉权重）。
 
 **首次安装慢**
 正常。两个转写引擎都要 PyTorch，加起来 1 GB 以上。挂了代理会更慢，

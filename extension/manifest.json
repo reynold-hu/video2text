@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "OpenVideo2Text",
+  "version": "1.0.0",
+  "description": "把当前页面的视频转成文字，交给本机运行的 video2text 服务处理",
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": ["http://127.0.0.1:8756/*", "http://localhost:8756/*"],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "提取文字"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

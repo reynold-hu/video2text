@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
 from core import asr, audio, cookies, pipeline, router, writer
@@ -21,6 +22,21 @@ ROOT = Path(__file__).resolve().parent
 PORT = 8756
 
 app = FastAPI(title="video2text")
+
+# 浏览器扩展从 chrome-extension:// 发起请求，属于跨源。
+# 服务只监听 127.0.0.1，本来就出不了本机，所以放开来源没有额外风险。
+#
+# allow_origin_regex 而不是 allow_origins=["*"]，allow_private_network=True 而不是
+# 自己写中间件：Chrome 的私有网络访问策略（从网页/扩展访问 localhost）不接受通配的
+# 来源、并且会发一个带 Access-Control-Request-Private-Network 的预检；starlette 内置
+# 处理了这两件事，缺了任何一个预检都会返回 400，扩展就再也连不上本地服务。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=".*",
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_private_network=True,
+)
 
 
 @dataclass
@@ -71,6 +87,20 @@ def api_engines() -> dict:
     return {"engines": asr.available()}
 
 
+def _start_job(runner, *args) -> dict:
+    """建任务并丢到后台线程跑。"""
+    job = Job(id=uuid.uuid4().hex[:12])
+    with _lock:
+        # 只保留最近 20 个任务，避免长时间运行内存里堆着结果
+        if len(_jobs) > 20:
+            for k in list(_jobs)[:-20]:
+                _jobs.pop(k, None)
+        _jobs[job.id] = job
+
+    threading.Thread(target=runner, args=(job, *args), daemon=True).start()
+    return {"job_id": job.id}
+
+
 @app.post("/api/parse")
 def api_parse(payload: dict) -> dict:
     text = (payload or {}).get("url", "")
@@ -81,16 +111,20 @@ def api_parse(payload: dict) -> dict:
     if not (text or "").strip():
         raise HTTPException(status_code=400, detail="请先粘贴链接")
 
-    job = Job(id=uuid.uuid4().hex[:12])
-    with _lock:
-        # 只保留最近 20 个任务，避免长时间运行内存里堆着结果
-        if len(_jobs) > 20:
-            for k in list(_jobs)[:-20]:
-                _jobs.pop(k, None)
-        _jobs[job.id] = job
+    return _start_job(_run_job, text, engine, language)
 
-    threading.Thread(target=_run_job, args=(job, text, engine, language), daemon=True).start()
-    return {"job_id": job.id}
+
+@app.post("/api/from-page")
+def api_from_page(payload: dict) -> dict:
+    """给浏览器扩展用。页面里已经拿到元信息和媒体直链，不用再解析一遍。"""
+    payload = payload or {}
+    engine = payload.get("engine", "mlx")
+    language = payload.get("language", "zh") or None
+
+    if not (payload.get("url") or "").strip():
+        raise HTTPException(status_code=400, detail="没拿到页面地址")
+
+    return _start_job(_run_page_job, payload, engine, language)
 
 
 @app.get("/api/job/{job_id}")
@@ -145,15 +179,29 @@ def api_download(job_id: str, fmt: str) -> Response:
 
 
 def _run_job(job: Job, text: str, engine: str, language: str | None) -> None:
+    _guard(job, pipeline.run, text, engine=engine, language=language, on_progress=job.log)
+
+
+def _run_page_job(job: Job, payload: dict, engine: str, language: str | None) -> None:
+    _guard(
+        job,
+        pipeline.run_from_page,
+        payload,
+        engine=engine,
+        language=language,
+        on_progress=job.log,
+    )
+
+
+def _guard(job: Job, fn, *args, **kwargs) -> None:
+    """跑任务并把结果/错误写回 job。任何异常都不能让后台线程静默死掉。"""
     try:
-        job.transcript = pipeline.run(
-            text, engine=engine, language=language, on_progress=job.log
-        )
+        job.transcript = fn(*args, **kwargs)
         job.status = "done"
     except pipeline.PipelineError as e:
         job.status = "error"
         job.error = str(e)
-    except Exception as e:  # 兜底，别让后台线程静默死掉
+    except Exception as e:
         job.status = "error"
         job.error = f"内部错误：{e}"
         traceback.print_exc()
