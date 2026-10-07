@@ -170,12 +170,29 @@ Python 那套全程不联网。
 首次要下载模型（默认那个约 1.6 GB），之后就快了。赶时间可以换 `small` 或 `tiny` 模型。
 
 **mlx-whisper 一直说「模型待下载」，或者下载总是失败**
-默认模型 1.6 GB，网络不稳时很难拉下来。两个办法：
+默认模型 1.6 GB，网络不稳时很难拉下来。三个办法，按推荐顺序：
 
-- 换国内镜像重试：`HF_ENDPOINT=https://hf-mirror.com python app.py`
-- **直接用 FunASR 引擎** —— 它的模型通常更小、更易下载，而且中文准确率更好
+1. **直接用 FunASR 引擎** —— 中文准确率本来就更优，模型也更容易下（实测 2 GB 顺利下完）
+2. **用 curl 断点续传手动下**。`huggingface_hub` 的 `snapshot_download` 一失败就从头再来，
+   不稳的线路上永远收敛不了；换成断点续传能磨下来：
 
-页面上会标出每个引擎的模型是否已经在本机（「模型待下载」= 点下去要先联网拉权重）。
+   ```bash
+   DIR=~/.cache/video2text/models/whisper-large-v3-turbo
+   mkdir -p "$DIR"
+   BASE=https://huggingface.co/mlx-community/whisper-large-v3-turbo/resolve/main
+   for f in config.json; do curl -sL -o "$DIR/$f" "$BASE/$f"; done
+   # 循环续传，断了就从断点接着来
+   until curl -L -C - -o "$DIR/weights.safetensors" "$BASE/weights.safetensors"; do sleep 2; done
+   ```
+
+   下好后程序会自动发现这个目录（放在 `.part` 里的半截文件不会被误认成完整的）。
+
+3. ~~换国内镜像 `HF_ENDPOINT=https://hf-mirror.com`~~ —— **这条没用，别试**。
+   实测 `hf-mirror.com` 对 API 和文件请求都返回 308 重定向回 `huggingface.co`，
+   等于没镜像，请求照样直连。
+
+页面上会标出每个引擎的模型是否已经在本机（「模型待下载」= 点下去要先联网拉权重），
+并默认选中模型已在本地的那一个。
 
 **首次安装慢**
 正常。两个转写引擎都要 PyTorch，加起来 1 GB 以上。挂了代理会更慢，
