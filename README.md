@@ -79,11 +79,15 @@ V2T_MLX_MODEL=mlx-community/whisper-small-mlx python app.py
 
 小红书**从来没有字幕轨**，所以永远走本地转写。
 
-两个硬约束：
+三个硬约束：
 
 - **必须粘完整分享链接**（形如 `https://www.xiaohongshu.com/explore/xxxx?xsec_token=...`）。
   `xsec_token` 是笔记一对一的，缺了会解析失败。App 里复制的那一整段分享文案可以整个粘进来，链接会自动识别。
 - **只支持视频笔记**，图文笔记没有音轨。
+- **链接会失效，而且会触发风控。** 实测同一条链接十分钟内从可用变为不可用 ——
+  小红书返回 HTTP 200 但页面里不含笔记数据（`noteDetailMap` 为空），yt-dlp 因此报
+  `No video formats found`。遇到这个提示就回 App 重新分享一次拿新链接，不要连续重试，
+  请求越密越容易被限。
 
 笔记正文文案会一并抓下来，附在结果末尾。
 

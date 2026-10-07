@@ -147,7 +147,13 @@ def _friendly(msg: str) -> str:
     if "unsupported url" in low:
         return "yt-dlp 不认这个链接，可能是图文笔记或链接不完整（小红书需要带 xsec_token 的完整分享链接）"
     if "no video formats" in low or "requested format" in low:
-        return "这个笔记没有视频（可能是图文），无法提取音频"
+        # 小红书最常见的失败：页面能打开，但服务端返回的是不含笔记数据的降级页面，
+        # 于是 yt-dlp 找不到任何视频流。表现为报这个错，而不是 HTTP 错误。
+        return (
+            "解析不到视频流。如果是小红书，多半是分享链接里的 xsec_token 过期了，"
+            "或者短时间请求太多触发了风控 —— 回 App 重新分享一次拿条新链接即可。"
+            "图文笔记（没有视频）也会是这个提示。"
+        )
     if "login" in low or "cookies" in low or "sign in" in low:
         return "需要登录态才能访问，请在浏览器里登录后重试"
     if "403" in low or "forbidden" in low:

@@ -95,8 +95,14 @@ def _friendly(msg: str, url: str) -> str:
             "（形如 https://www.xiaohongshu.com/explore/xxxx?xsec_token=...），"
             "短链 xhslink.com 会自动展开，但缺 xsec_token 会解析失败。"
         )
-    if "unable to extract" in low or "no video" in low:
-        return "解析不出内容，可能是图文笔记、私密笔记，或链接已失效"
+    if "no video formats" in low or "unable to extract" in low or "no video" in low:
+        # 这是小红书最典型的失败：HTTP 200，但返回的页面里没有 noteDetailMap，
+        # 也就是服务端拒绝提供笔记数据。几乎总是 token 过期或触发风控。
+        return (
+            "小红书没有返回笔记数据（页面能打开，但内容被服务端省略了）。\n"
+            "常见原因是分享链接里的 xsec_token 已过期，或短时间内请求过多触发了风控。\n"
+            "解决办法：回小红书 App 重新分享一次，用新链接重试。"
+        )
     if "404" in low or "not found" in low:
         return "笔记不存在或已被删除"
     return msg.splitlines()[0][:200]
