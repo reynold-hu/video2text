@@ -17,6 +17,7 @@
 import yt_dlp
 
 from ..schemas import Transcript
+from ..ytdlp_util import base_opts
 from .base import NoSubtitle, Platform, ProgressFn, Unsupported
 
 # 小红书的笔记正文（作者写的文案）本身往往就是有价值的内容，
@@ -58,8 +59,7 @@ class XiaohongshuPlatform(Platform):
     @staticmethod
     def _extract(url: str) -> dict:
         opts = {
-            "quiet": True,
-            "no_warnings": True,
+            **base_opts(),
             "skip_download": True,
             "noplaylist": True,
         }

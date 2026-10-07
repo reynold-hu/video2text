@@ -123,10 +123,24 @@ core/
   audio.py             yt-dlp 下载音频 + ffmpeg 转换
   writer.py            五种输出格式
   schemas.py           统一数据模型
+  ytdlp_util.py        yt-dlp 的共用静音配置
   platforms/           三个平台的适配器，各自独立
   asr/                 两个转写引擎，接口统一
+tests/                 自动化测试
 docs/                  README 用的图
 ```
+
+## 跑测试
+
+用标准库 `unittest`，不需要额外装东西：
+
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
+
+覆盖了输出格式、URL 路由、三个平台的解析逻辑，以及**流水线的降级决策**
+（有字幕时绝不下载音频、无字幕时元信息要接住、图文笔记不该浪费时间走 ASR）。
+全程不联网。
 
 加一个平台只需要在 `core/platforms/` 下加一个文件实现 `fetch()`，
 拿不到字幕就抛 `NoSubtitle` —— 剩下的流水线会自动接管。

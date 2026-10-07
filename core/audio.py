@@ -12,6 +12,8 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from .ytdlp_util import base_opts
+
 WORK_DIR = Path(__file__).resolve().parent.parent / ".work"
 
 # whisper 系模型统一要求 16kHz 单声道
@@ -62,13 +64,11 @@ def download(url: str, site: str | None = None, on_progress=None) -> Path:
             log(f"正在下载音频… {pct}%")
 
     opts = {
+        **base_opts(),
         "format": "bestaudio/best",
         "outtmpl": str(job_dir / "audio.%(ext)s"),
-        "quiet": True,
-        "no_warnings": True,
         "noplaylist": True,
-        # quiet 不会关掉下载进度条，得单独关，否则会刷屏
-        "noprogress": True,
+        # 进度由我们自己的 hook 汇报给前端，不走 yt-dlp 的输出
         "progress_hooks": [hook],
     }
 

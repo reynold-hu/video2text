@@ -50,7 +50,7 @@ class MLXWhisperEngine(Engine):
                 verbose=None,
             )
         except Exception as e:
-            raise ASRError(f"mlx-whisper 转写失败：{str(e)[:200]}") from e
+            raise ASRError(_friendly(e, MODEL)) from e
 
         log("正在整理文本…")
         return [
@@ -62,3 +62,19 @@ class MLXWhisperEngine(Engine):
             for s in result.get("segments") or []
             if (s.get("text") or "").strip()
         ]
+
+
+def _friendly(err: Exception, model: str) -> str:
+    """首次使用要下模型，网络不好时最容易卡在这一步，报错要说清楚。"""
+    text = str(err)
+    low = text.lower()
+
+    if "localentrynotfound" in low or "connection" in low or "timed out" in low:
+        return (
+            f"下载模型失败（{model}）。首次使用需要联网下载权重，"
+            "网络不稳时会中断。可以重试，或者换国内镜像后重试：\n"
+            "    HF_ENDPOINT=https://hf-mirror.com python app.py"
+        )
+    if "not found" in low and "repo" in low:
+        return f"找不到模型 {model}。检查 V2T_MLX_MODEL 是否写对了。"
+    return f"mlx-whisper 转写失败：{text[:200]}"

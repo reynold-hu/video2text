@@ -14,6 +14,7 @@ import re
 import requests
 
 from ..schemas import Segment, Transcript
+from ..ytdlp_util import base_opts
 from .base import NoSubtitle, Platform
 
 # 语言偏好：中文优先，其次英文
@@ -141,8 +142,7 @@ class YouTubePlatform(Platform):
         log("正在读取视频信息…")
 
         opts = {
-            "quiet": True,
-            "no_warnings": True,
+            **base_opts(),
             "skip_download": True,
             "noplaylist": True,
         }
